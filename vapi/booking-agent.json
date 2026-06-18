@@ -1,0 +1,74 @@
+{
+  "name": "Booking Agent",
+  "model": "mini-max/max-01",
+  "provider": "openai",
+  "voice": "alloy",
+  "serverUrl": "${N8N_WEBHOOK_URL}/webhook/booking-agent",
+  "assistantPrompt": "You are a friendly, professional booking assistant for ${BUSINESS_NAME}. Be warm, conversational, and efficient. Your goal is to capture the caller's name, understand what service they need, check calendar availability, and book an appointment. Never say 'I don't know' or 'I can't help with that' — always route to the right action. Keep responses under 15 words. If you need to check availability, use the check_availability function. When the caller confirms a time slot, use book_appointment. After booking, use notify_owner to alert the business owner.",
+  "functions": [
+    {
+      "name": "check_availability",
+      "description": "Check Cal.com for available appointment slots",
+      "parameters": {
+        "type": "object",
+        "required": ["date", "duration"],
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "Date to check in YYYY-MM-DD format"
+          },
+          "duration": {
+            "type": "integer",
+            "description": "Meeting duration in minutes (30 or 60)"
+          }
+        }
+      }
+    },
+    {
+      "name": "book_appointment",
+      "description": "Book an appointment slot in Cal.com for the caller",
+      "parameters": {
+        "type": "object",
+        "required": ["name", "email", "phone", "date", "time", "service"],
+        "properties": {
+          "name": { "type": "string", "description": "Caller's full name" },
+          "email": { "type": "string", "description": "Caller's email address" },
+          "phone": { "type": "string", "description": "Caller's phone number" },
+          "date": { "type": "string", "description": "Date in YYYY-MM-DD format" },
+          "time": { "type": "string", "description": "Time in HH:MM 24-hour format" },
+          "service": { "type": "string", "description": "Type of service or appointment" }
+        }
+      }
+    },
+    {
+      "name": "send_confirmation",
+      "description": "Send a booking confirmation to the caller",
+      "parameters": {
+        "type": "object",
+        "required": ["appointment_id", "contact"],
+        "properties": {
+          "appointment_id": { "type": "string" },
+          "contact": { "type": "string", "description": "Email or phone to send confirmation to" }
+        }
+      }
+    },
+    {
+      "name": "notify_owner",
+      "description": "Notify the business owner about a new booking via Telegram",
+      "parameters": {
+        "type": "object",
+        "required": ["caller_name", "service", "date_time", "phone", "email"],
+        "properties": {
+          "caller_name": { "type": "string" },
+          "service": { "type": "string" },
+          "date_time": { "type": "string" },
+          "phone": { "type": "string" },
+          "email": { "type": "string" }
+        }
+      }
+    }
+  ],
+  "firstMessage": "Hi, you've reached ${BUSINESS_NAME}. I'm their AI booking assistant. Who am I speaking with today?",
+  "recordingEnabled": true,
+  "transcriptionModel": "nova-2"
+}

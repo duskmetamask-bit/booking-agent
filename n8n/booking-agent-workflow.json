@@ -1,0 +1,330 @@
+{
+  "name": "Booking Agent Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "booking-agent",
+        "rawBody": false,
+        "responseMode": "lastNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "VAPI Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "webhookId": "booking-agent"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.minimax.io/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer ${MINIMAX_API_KEY}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "MiniMax-Text-01"
+            },
+            {
+              "name": "messages",
+              "value": [
+                {
+                  "role": "system",
+                  "content": "Extract booking details from this call transcript. Return ONLY valid JSON with no markdown, no explanation: {\"caller_name\": \"string|null\", \"caller_email\": \"string|null\", \"caller_phone\": \"string|null\", \"service_type\": \"string|null\", \"intent_level\": \"high|medium|low\", \"notes\": \"string\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "={{ $json.transcript }}"
+                }
+              ]
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "minimax-qualify",
+      "name": "MiniMax Qualify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.cal.com/v1/availability/slots?apiKey=${CALCOM_API_KEY}&eventTypeId=${EVENT_TYPE_ID}&startTime={{ $json.startTime }}&endTime={{ $json.endTime }}",
+        "options": {}
+      },
+      "id": "calcom-check",
+      "name": "Cal.com Check Availability",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cal.com/v1/bookings",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "eventTypeId",
+              "value": "${EVENT_TYPE_ID}"
+            },
+            {
+              "name": "start",
+              "value": "={{ $json.start }}"
+            },
+            {
+              "name": "end",
+              "value": "={{ $json.end }}"
+            },
+            {
+              "name": "name",
+              "value": "={{ $json.caller_name }}"
+            },
+            {
+              "name": "email",
+              "value": "={{ $json.caller_email }}"
+            },
+            {
+              "name": "phone",
+              "value": "={{ $json.caller_phone }}"
+            },
+            {
+              "name": "notes",
+              "value": "={{ $json.notes }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "calcom-book",
+      "name": "Cal.com Book",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "${TELEGRAM_CHAT_ID}"
+            },
+            {
+              "name": "text",
+              "value": "=?New Booking\nName: {{ $json.caller_name }}\nService: {{ $json.service_type }}\nDate: {{ $json.date_time }}\nPhone: {{ $json.caller_phone }}\nEmail: {{ $json.caller_email }}\nIntent: {{ $json.intent_level }}"
+            },
+            {
+              "name": "parse_mode",
+              "value": "Markdown"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "telegram-notify",
+      "name": "Telegram Owner Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=${SUPABASE_URL}/rest/v1/calls",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "${SUPABASE_SERVICE_KEY}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ${SUPABASE_SERVICE_KEY}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "vapi_call_id",
+              "value": "={{ $json.call_id }}"
+            },
+            {
+              "name": "caller_number",
+              "value": "={{ $json.caller_number }}"
+            },
+            {
+              "name": "duration_seconds",
+              "value": "={{ $json.duration }}"
+            },
+            {
+              "name": "outcome",
+              "value": "booked"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "supabase-log-call",
+      "name": "Supabase Log Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=${SUPABASE_URL}/rest/v1/appointments",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "${SUPABASE_SERVICE_KEY}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer ${SUPABASE_SERVICE_KEY}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "vapi_call_id",
+              "value": "={{ $json.call_id }}"
+            },
+            {
+              "name": "caller_name",
+              "value": "={{ $json.caller_name }}"
+            },
+            {
+              "name": "caller_email",
+              "value": "={{ $json.caller_email }}"
+            },
+            {
+              "name": "caller_phone",
+              "value": "={{ $json.caller_phone }}"
+            },
+            {
+              "name": "service_type",
+              "value": "={{ $json.service_type }}"
+            },
+            {
+              "name": "booked_at",
+              "value": "={{ $json.date_time }}"
+            },
+            {
+              "name": "owner_notified",
+              "value": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "supabase-log-booking",
+      "name": "Supabase Log Booking",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1320, 0]
+    }
+  ],
+  "connections": {
+    "VAPI Webhook": {
+      "main": [
+        [
+          {
+            "node": "MiniMax Qualify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MiniMax Qualify": {
+      "main": [
+        [
+          {
+            "node": "Cal.com Check Availability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cal.com Book": {
+      "main": [
+        [
+          {
+            "node": "Telegram Owner Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Owner Notification": {
+      "main": [
+        [
+          {
+            "node": "Supabase Log Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Log Call": {
+      "main": [
+        [
+          {
+            "node": "Supabase Log Booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
